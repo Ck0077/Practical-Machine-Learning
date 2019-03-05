@@ -1,0 +1,111 @@
+---
+title: "Writeup"
+author: "Ck"
+date: "March 2, 2019"
+output: html_document
+---
+
+#Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+
+#Data set
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+#Data Loading
+```{r, echo=FALSE}
+suppressWarnings(library(caret))
+suppressWarnings(library(randomForest))
+suppressWarnings(library(Hmisc))
+suppressWarnings(library(foreach))
+suppressWarnings(library(doParallel))
+suppressWarnings(library(rpart))
+suppressWarnings(library(rpart.plot))
+suppressWarnings(library(rattle))
+set.seed(1813)
+
+training<-read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"), na.strings = c("NA",""), strip.white = TRUE)
+
+test<-read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"), na.strings = c("NA",""), strip.white = TRUE)
+
+```
+
+#Data Cleaning
+
+Now we will do data partition(75% and 25%)
+```{r}
+in_train<-createDataPartition(training$classe, p=0.75, list=FALSE)
+train_set<-training[in_train,]
+test_set<-training[-in_train,]
+
+dim(train_set)
+dim(test_set)
+```
+
+Clean test and training data from near-zero-variance values and NAs
+```{r}
+nzv<-nearZeroVar(train_set)
+train_set<-train_set[,-nzv]
+test_set<-test_set[,-nzv]
+
+nas<-sapply(train_set, function(x) mean(is.na(x))) >0.95
+train_set<-train_set[,nas==FALSE]
+test_set<-test_set[,nas==FALSE]
+```
+
+column 1-5 can be removed as they are just id variables.
+```{r}
+train_set<-train_set[,-(1:5)]
+test_set<-test_set[,-(1:5)]
+
+dim(train_set)
+dim(test_set)
+```
+
+#Prediction Models
+##1. Decision Tree Model
+```{r}
+set.seed(1813)
+dec_tree<-rpart(classe~., data=train_set, method="class")
+fancyRpartPlot(dec_tree)
+```
+
+Predictions on test_set
+```{r}
+predict_decision_tree<-predict(dec_tree, newdata=test_set, type="class")
+conf_matrix<-confusionMatrix(predict_decision_tree, test_set$classe)
+conf_matrix
+```
+
+Plot predictive accuracy of decision tree model
+```{r}
+plot(conf_matrix$table, col=conf_matrix$byClass, main=paste("Predictive Accuracy=", round(conf_matrix$overall['Accuracy'],4)))
+```
+
+##2. Random Forest Model
+```{r}
+
+control_rf<-trainControl(method="repeatedcv", number = 5, repeats = 2)
+fit_rf<-train(classe~., data=train_set, method="rf", trControl=control_rf, tuneLength=1, verbose=FALSE)
+fit_rf$finalModel
+```
+
+Prediction on test_set
+```{r}
+predict_rf<-predict(fit_rf, newdata=test_set)
+conf_matrix_rf<-confusionMatrix(predict_rf, test_set$classe)
+conf_matrix_rf
+```
+Predictive accuracy of Random Forest is 99.7%
+
+#Conclusion
+From above matrix, we can say that Random Forest model is very accurate with accuracy of about 99%.
